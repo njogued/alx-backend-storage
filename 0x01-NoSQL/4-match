@@ -1,0 +1,2 @@
+// List where k-v pair occurs in collection
+db.school.find({"name": "Holberton School"})
