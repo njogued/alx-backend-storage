@@ -1,35 +1,42 @@
 #!/usr/bin/env python3
-"""0. Cache class with init and store method
-1. Byte to str or int"""
+"""0. Create a Cache class. In the __init__ method, store an instance of
+the Redis client as a private variable named _redis (using redis.Redis())
+and flush the instance using flushdb.
+
+Create a store method that takes a data argument and returns a string.
+The method should generate a random key (e.g. using uuid), store the
+input data in Redis using the random key and return the key.
+
+Type-annotate store correctly. Remember that data can be a str,
+bytes, int or float.
+"""
+
+
 import redis
-import uuid
+from uuid import uuid4
 from typing import Union, Callable, Optional
-from functool import wraps
+from functools import wraps
 
 
 def count_calls(method: Callable) -> Callable:
-    """Decorator that counts the number of times a function is called"""
-
-    key = method.__qualname__  # Get the qualified name of the method
+    """returns a Callable"""
+    key = method.__qualname__
 
     @wraps(method)
     def wrapper(self, *args, **kwargs):
-        """Wrapper function that increments the count"""
-
-        self._redis.incr(key)  # Increment the count using Redis
-        return method(self, *args, **kwargs)  # Call the original method
+        """wrapper for decorated function"""
+        self._redis.incr(key)
+        return method(self, *args, **kwargs)
 
     return wrapper
 
 
 def call_history(method: Callable) -> Callable:
-    """Decorator that stores the history of inputs and outputs of a function"""
-
+    """store the history of inputs and outputs"""
     @wraps(method)
     def wrapper(self, *args, **kwargs):
-        """Wrapper function that stores inputs and outputs"""
-
-        input = str(args)  # Convert input arguments to a string
+        """wrapper for the decorated function"""
+        input = str(args)
         self._redis.rpush(method.__qualname__ + ":inputs", input)
         output = str(method(self, *args, **kwargs))
         self._redis.rpush(method.__qualname__ + ":outputs", output)
@@ -39,70 +46,74 @@ def call_history(method: Callable) -> Callable:
 
 
 def replay(fn: Callable):
-    """Function that displays the history of calls for a particular function"""
-
-    r = redis.Redis()  # Create a Redis client
-    function_name = fn.__qualname__  # Get the qualified name of the function
-
-    value = r.get(function_name)  # Get the count value from Redis
+    """display the history of calls of a particular function"""
+    r = redis.Redis()
+    function_name = fn.__qualname__
+    value = r.get(function_name)
     try:
-        value = int(value.decode("utf-8"))  # Convert the count value
+        value = int(value.decode("utf-8"))
     except Exception:
         value = 0
 
+    # print(f"{function_name} was called {value} times")
     print("{} was called {} times:".format(function_name, value))
-
+    # inputs = r.lrange(f"{function_name}:inputs", 0, -1)
     inputs = r.lrange("{}:inputs".format(function_name), 0, -1)
+
+    # outputs = r.lrange(f"{function_name}:outputs", 0, -1)
     outputs = r.lrange("{}:outputs".format(function_name), 0, -1)
 
     for input, output in zip(inputs, outputs):
         try:
-            input = input.decode("utf-8")  # Convert input to a string
+            input = input.decode("utf-8")
         except Exception:
             input = ""
 
         try:
-            output = output.decode("utf-8")  # Convert output to a string
+            output = output.decode("utf-8")
         except Exception:
             output = ""
 
+        # print(f"{function_name}(*{input}) -> {output}")
         print("{}(*{}) -> {}".format(function_name, input, output))
 
 
 class Cache:
-    """Cache class to implement redis"""
+    """Create a Cache class"""
 
     def __init__(self):
-        """Create and store an instance of Redis client"""
+        """store an instance of the Redis client"""
         self._redis = redis.Redis()
         self._redis.flushdb()
 
     @count_calls
     @call_history
     def store(self, data: Union[str, bytes, int, float]) -> str:
-        """Generate a random key and return it"""
-        key = str(uuid.uuid4())
-        self._redis.set(key, data)
-        return key
+        """generate a random key"""
+        random_key = str(uuid4())
+        self._redis.set(random_key, data)
+        return random_key
 
-    def get(key: str,
+    def get(self, key: str,
             fn: Optional[callable] = None) -> Union[str, bytes, int, float]:
-        """Function to convert the stored byte data to readable format"""
-        data = self._redis.get(key)
+        """convert the data back to the desired format"""
+        value = self._redis.get(key)
         if fn:
-            data = fn(data)
-        return data
-
-    def get_int(self, key: str) -> int:
-        """Decode the value returned from the get method"""
-        data = self._redis.get(key)
-        try:
-            data = int(data.decode("utf-8")
-        except Exception:
-            data=0
-        return data
+            value = fn(value)
+        return value
 
     def get_str(self, key: str) -> str:
-        """Decode data to int"""
-        data=self._redis.get(key)
-        return data.decode("utf-8")
+        """automatically parametrize Cache.get with the correct
+        conversion function"""
+        value = self._redis.get(key)
+        return value.decode("utf-8")
+
+    def get_int(self, key: str) -> int:
+        """automatically parametrize Cache.get with the correct
+        conversion function"""
+        value = self._redis.get(key)
+        try:
+            value = int(value.decode("utf-8"))
+        except Exception:
+            value = 0
+        return value
