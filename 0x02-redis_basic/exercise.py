@@ -2,12 +2,13 @@
 """1. Cache class with init and store method"""
 import redis
 import uuid
+from typing import Union
 
 
 class Cache:
     """Cache class to implement redis"""
 
-    def __init__():
+    def __init__(self):
         """Create and store an instance of Redis client"""
         self._redis = redis.Redis()
         self._redis.flushdb()
